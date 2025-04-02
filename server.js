@@ -10,7 +10,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "http://localhost:5500",
+        origin: process.env.FRONTEND_URL || "http://localhost:5500", // Dynamic origin
         methods: ["GET", "POST"],
     },
 });
@@ -19,18 +19,16 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 
-const users = {}; // Store users and their socket IDs
+const users = {};
 
 io.on("connection", (socket) => {
     console.log("User connected:", socket.id);
 
-    // Store user when they join
     socket.on("join", (userId) => {
         users[userId] = socket.id;
-        console.log("User Joined:", userId, socket.id);
+        console.log("Users:", users);
     });
 
-    // Handle private messages (including files)
     socket.on("privateMessage", ({ senderId, receiverId, message, file }) => {
         console.log(`Message from ${senderId} to ${receiverId}: ${message}`);
         if (file) {
@@ -44,7 +42,6 @@ io.on("connection", (socket) => {
         }
     });
 
-    // Handle typing indicator
     socket.on("typing", ({ senderId, receiverId }) => {
         const receiverSocketId = users[receiverId];
         if (receiverSocketId) {
@@ -53,7 +50,6 @@ io.on("connection", (socket) => {
         }
     });
 
-    // Handle stop typing
     socket.on("stopTyping", ({ senderId, receiverId }) => {
         const receiverSocketId = users[receiverId];
         if (receiverSocketId) {
@@ -62,7 +58,6 @@ io.on("connection", (socket) => {
         }
     });
 
-    // Handle user disconnect
     socket.on("disconnect", () => {
         for (let userId in users) {
             if (users[userId] === socket.id) {
@@ -78,4 +73,5 @@ app.get("/", (req, res) => {
     res.send("Server is running!");
 });
 
-server.listen(5000, () => console.log("Server running on port 5000"));
+const port = process.env.PORT || 5000;
+server.listen(port, () => console.log(`Server running on port ${port}`));
