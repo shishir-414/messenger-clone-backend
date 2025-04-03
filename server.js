@@ -10,7 +10,7 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: process.env.FRONTEND_URL || "http://localhost:5500", // Dynamic origin
+        origin: process.env.FRONTEND_URL || "http://localhost:5500",
         methods: ["GET", "POST"],
     },
 });
@@ -27,6 +27,7 @@ io.on("connection", (socket) => {
     socket.on("join", (userId) => {
         users[userId] = socket.id;
         console.log("Users:", users);
+        io.emit("userList", Object.keys(users)); // Broadcast updated user list
     });
 
     socket.on("privateMessage", ({ senderId, receiverId, message, file }) => {
@@ -58,11 +59,48 @@ io.on("connection", (socket) => {
         }
     });
 
+    // Video call signaling
+    socket.on("callUser", ({ callerId, receiverId, offer }) => {
+        const receiverSocketId = users[receiverId];
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("incomingCall", { callerId, offer });
+            console.log(`Call from ${callerId} to ${receiverId}`);
+        } else {
+            socket.emit("callFailed", { receiverId });
+            console.log(`Receiver ${receiverId} not available for call`);
+        }
+    });
+
+    socket.on("answerCall", ({ callerId, receiverId, answer }) => {
+        const callerSocketId = users[callerId];
+        if (callerSocketId) {
+            io.to(callerSocketId).emit("callAnswered", { receiverId, answer });
+            console.log(`${receiverId} answered call from ${callerId}`);
+        }
+    });
+
+    socket.on("iceCandidate", ({ targetId, candidate }) => {
+        const targetSocketId = users[targetId];
+        if (targetSocketId) {
+            io.to(targetSocketId).emit("iceCandidate", { candidate });
+            console.log(`ICE candidate sent to ${targetId}`);
+        }
+    });
+
+    socket.on("endCall", ({ targetId }) => {
+        const targetSocketId = users[targetId];
+        if (targetSocketId) {
+            io.to(targetSocketId).emit("callEnded");
+            console.log(`Call ended with ${targetId}`);
+        }
+    });
+
     socket.on("disconnect", () => {
         for (let userId in users) {
             if (users[userId] === socket.id) {
                 delete users[userId];
                 console.log(`User disconnected: ${userId}, Socket ID: ${socket.id}`);
+                io.emit("userList", Object.keys(users)); // Update user list
                 break;
             }
         }
